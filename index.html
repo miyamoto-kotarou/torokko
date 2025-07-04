@@ -1,0 +1,938 @@
+```html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>クイズゲーム</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* ボタンや要素のアニメーションとスタイル */
+    .animate-pulse { animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .result-overlay {
+      position: fixed; top: 20%; left: 50%; transform: translateX(-50%); z-index: 55;
+      background: rgba(0, 0, 0, 0.8); padding: 1rem 2rem; border-radius: 0.75rem;
+      color: white; font-size: 4rem; font-weight: bold; text-align: center;
+    }
+    .game-over-screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 60; color: red;
+      font-size: 8rem; font-weight: bold; text-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+    }
+    .start-screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 30; color: white;
+      font-size: 4rem; font-weight: bold;
+    }
+    #start-button, #start-settings-button, #detailed-background-button, #toggle-settings-form, #toggle-detailed-background {
+      z-index: 35; pointer-events: auto !important;
+    }
+    #settings-form, #detailed-background-form {
+      z-index: 40; background: rgba(0, 0, 0, 0.95); padding: 2rem; border-radius: 1rem;
+      max-height: 80vh; overflow-y: auto; width: 100%; max-width: 48rem;
+    }
+    #question-display { display: block !important; opacity: 1 !important; pointer-events: auto !important; }
+    #answer-container {
+      display: flex; flex-direction: column; justify-content: flex-end; min-height: 400px;
+      position: relative; background: rgba(0, 0, 0, 0.2); border-radius: 1rem; overflow: hidden; z-index: 10;
+    }
+    #answer-buttons {
+      display: flex; flex-direction: row; justify-content: center; align-items: center;
+      gap: 40px; position: relative; z-index: 15;
+    }
+    #countdown {
+      position: relative; z-index: 10; text-align: center; font-size: 4rem; font-weight: bold;
+      color: white; background: rgba(0, 0, 0, 0.75); padding: 0.5rem 1rem; border-radius: 0.75rem;
+    }
+    button { pointer-events: auto !important; }
+    .fly-in { animation: flyIn 1s ease-out forwards; transform-origin: center; pointer-events: none; }
+    @keyframes flyIn {
+      0% { transform: translateZ(-1000px) scale(0.5); opacity: 0; }
+      100% { transform: translateZ(0) scale(1); opacity: 1; }
+    }
+    .disabled-answer { opacity: 0.5; cursor: not-allowed; pointer-events: none !important; }
+    .enabled-answer { animation: enablePulse 0.5s ease-in-out 2; }
+    @keyframes enablePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    .clicked-answer { background-color: #3b82f6 !important; transform: scale(1.2); transition: transform 0.2s ease-in-out; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5); }
+    .selected-answer { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 50; transition: all 0.5s ease-in-out; }
+    #settings-button-container { z-index: 10; width: 100%; max-width: 1280px; display: flex; justify-content: center; gap: 1rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body class="bg-gray-900 text-white font-sans min-h-screen flex flex-col items-center justify-start p-8 relative">
+  <div id="start-screen" class="start-screen">
+    <p>クイズゲーム</p>
+    <button id="start-button" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl text-3xl mt-8">スタート</button>
+    <div class="flex gap-4 mt-4">
+      <button id="start-settings-button" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl text-3xl">設定を変更</button>
+      <button id="detailed-background-button" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl text-3xl">背景を詳しく設定</button>
+    </div>
+    <div id="settings-form" class="hidden mt-4">
+      <h3 class="text-2xl font-medium mb-8 text-center">背景を変更</h3>
+      <label for="media-file" class="block text-2xl font-medium mb-4 text-center">ページの背景動画または画像を選択（MP4/JPG/PNG/GIF）:</label>
+      <div class="flex gap-4 mb-12">
+        <input id="media-file" type="file" accept="video/mp4,image/jpeg,image/png,image/gif" class="w-full p-4 rounded-xl bg-gray-700 text-white border border-gray-500 focus:outline-none focus:border-blue-500 text-2xl">
+        <button id="change-media" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl text-2xl">変更</button>
+      </div>
+      <h3 class="text-2xl font-medium mb-8 text-center">問題を変更</h3>
+      <div class="flex gap-4 mb-8 justify-center">
+        <input id="import-questions" type="file" accept="application/json" class="p-4 rounded-xl bg-gray-700 text-white border border-gray-500 focus:outline-none菩
+      <button id="export-questions" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl text-2xl">問題と背景をエクスポート</button>
+    </div>
+    <div id="question-list" class="mb-12"></div>
+    <label for="question-number" class="block text-2xl font-medium mb-4 text-center">変更する問題番号を選択:</label>
+    <select id="question-number" class="w-full p-4 mb-8 rounded-xl bg-gray-700 text-white border border-gray-500 focus:outline-none focus:border-blue-500 text-2xl"></select>
+    <label for="question-text" class="block text-2xl font-medium mb-4 text-center">新しい問題を入力:</label>
+    <input id="question-text" type="text" placeholder="例: 地球上で最大の大陸は？" class="w-full p-4 mb-8 rounded-xl bg-gray-700 text-white border border-gray-500 focus:outline-none focus:border-blue-500 text-2xl">
+    <label for="answer1-text" class="block text-2xl font-medium mb-4 text-center">選択肢1（左）:</label>
+    <input id="answer1-text" type="text" placeholder="例: アフリカ" class="w-full p-4 mb-8 rounded-xl bg-gray-700 text-white border border-gray-500 focus:outline-none focus:border-blue-500 text-2xl">
+    <label for="answer2-text" class="block text-2xl font-medium mb-4 text-center">選択肢2（右）:</label>
+    <input id="answer2-text" type="text" placeholder="例: ユーラシア大陸" class="w-full p-4 mb-8 rounded-xl bg-gray-700 text-white border border-gray-500 focus:outline-none focus:border-blue-500 text-2xl">
+    <label class="block text-2xl font-medium mb-4 text-center">正解を選択:</label>
+    <div class="flex justify-center gap-8 mb-8">
+      <label class="text-2xl"><input type="radio" name="correct-answer" value="1" checked> 選択肢1</label>
+      <label class="text-2xl"><input type="radio" name="correct-answer" value="2"> 選択肢2</label>
+    </div>
+    <button id="change-question" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl w-full text-2xl">問題を更新</button>
+  </div>
+  <div id="detailed-background-form" class="hidden mt-4">
+    <h3 id="background-form-title" class="text-2xl font-medium mb-8 text-center">背景の詳細設定</h3>
+    <label for="custom-video-file" class="block text-2xl font-medium mb-4 text-center">カスタム動画を選択（MP4）:</label>
+    <input id="custom-video-file" type="file" accept="video/mp4" class="w-full p-4 mb-8 rounded-xl bg-gray-700 text-white border border-gray-500 focus:outline-none focus:border-blue-500 text-2xl">
+    <label for="background-opacity" class="block text-2xl font-medium mb-4 text-center">背景の透明度（0.1〜1.0）:</label>
+    <input id="background-opacity" type="range" min="0.1" max="1.0" step="0.1" value="0.3" class="w-full mb-8">
+    <label for="predefined-background" class="block text-2xl font-medium mb-4 text-center">プリセット背景を選択:</label>
+    <select id="predefined-background" class="w-full p-4 mb-8 rounded-xl bg-gray-700 text-white border border-gray-500 focus:outline-none focus:border-blue-500 text-2xl">
+      <option value="video|https://coverr.co/videos/abstract-blue-background-9E8X7Y2K0T|default.mp4">デフォルト動画（抽象的な青）</option>
+      <option value="video|https://coverr.co/videos/gentle-waves-9E8X7Y2K0T|waves.mp4">動画：穏やかな波</option>
+      <option value="image|https://images.pexels.com/photos/956981/milky-way-starry-sky-night-sky-star-956981.jpeg|milky-way.jpg">画像：星空</option>
+      <option value="image|https://images.pexels.com/photos/531756/pexels-photo-531756.jpeg|forest.jpg">画像：森林</option>
+    </select>
+    <label class="block text-2xl font-medium mb-4 text-center">動画設定:</label>
+    <div class="flex justify-center gap-8 mb-8">
+      <label class="text-2xl"><input id="video-loop" type="checkbox" checked> ループ再生</label>
+      <label class="text-2xl"><input id="video-muted" type="checkbox" checked> ミュート</label>
+    </div>
+    <button id="reset-background" class="bg-gray-600 hover:bg-gray-800 text-white font-bold py-4 px-8 rounded-xl w-full text-2xl mb-4">デフォルト背景にリセット</button>
+    <div class="flex gap-4">
+      <button id="save-background-settings" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl w-full text-2xl">保存</button>
+      <button id="cancel-background-settings" class="bg-red-600 hover:bg-red-800 text-white font-bold py-4 px-8 rounded-xl w-full text-2xl">キャンセル</button>
+    </div>
+  </div>
+</div>
+<video id="background-video" autoplay loop muted playsinline class="absolute top-0 left-0 w-full h-full object-cover opacity-30 z-0 hidden">
+  <source id="video-source" src="https://coverr.co/videos/abstract-blue-background-9E8X7Y2K0T" type="video/mp4" />
+</video>
+<img id="background-image" src="" class="absolute top-0 left-0 w-full h-full object-cover opacity-30 z-0 hidden" alt="カスタマイズ可能なクイズインターフェースの背景画像" />
+<p id="media-error" class="text-red-500 relative w-full text-center hidden z-10 mt-8 text-4xl">メディアを読み込めません。MP4動画またはJPG/PNG/GIF画像を選択してください。</p>
+<div id="get-ready-message" class="text-4xl font-bold text-white bg-gray-800 bg-opacity-75 px-8 py-4 rounded-xl hidden z-10">準備してください！</div>
+<div id="quiz-container" class="w-full max-w-6xl z-10">
+  <div id="settings-button-container" class="hidden">
+    <div class="flex justify-center gap-4">
+      <button id="toggle-settings-form" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl text-3xl">設定を変更</button>
+      <button id="toggle-detailed-background" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl text-3xl">背景を詳しく設定</button>
+    </div>
+    <div id="settings-form-container" class="hidden mt-4"></div>
+  </div>
+  <h2 id="question-display" class="text-4xl mb-12 font-semibold text-center w-full bg-gray-800 bg-opacity-75 px-8 py-4 rounded-xl hidden">問題 1: 地球上で最大の大陸は？</h2>
+  <div id="complete-message" class="text-center hidden mb-12 w-full z-10">
+    <p class="text-6xl font-bold text-green-500 bg-gray-800 px-12 py-4 rounded-xl shadow-lg">全問正解！</p>
+    <button id="try-again-complete" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl mt-8 text-3xl">もう一度挑戦</button>
+  </div>
+  <div id="answer-container" class="w-full hidden">
+    <div id="answer-buttons">
+      <button id="answer1-btn" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-12 px-12 rounded-xl text-4xl w-[400px] h-[400px] flex items-center justify-center disabled-answer">アフリカ</button>
+      <div id="countdown" class="text-4xl font-bold text-white bg-gray-800 bg-opacity-75 px-6 py-3 rounded-xl hidden">5</div>
+      <button id="answer2-btn" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-12 px-12 rounded-xl text-4xl w-[400px] h-[400px] flex items-center justify-center disabled-answer">ユーラシア大陸</button>
+    </div>
+  </div>
+</div>
+<div id="game-over" class="game-over-screen hidden">
+  <p>ゲームオーバー</p>
+  <button id="try-again" class="bg-blue-600 hover:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl text-3xl mt-8">もう一度挑戦</button>
+</div>
+
+<script>
+  // ページ読み込み時に初期化
+  document.addEventListener('DOMContentLoaded', () => {
+    // DOM要素のキャッシュ
+    const elements = {
+      startScreen: document.getElementById('start-screen'),
+      startButton: document.getElementById('start-button'),
+      startSettingsButton: document.getElementById('start-settings-button'),
+      detailedBackgroundButton: document.getElementById('detailed-background-button'),
+      toggleDetailedBackground: document.getElementById('toggle-detailed-background'),
+      video: document.getElementById('background-video'),
+      videoSource: document.getElementById('video-source'),
+      image: document.getElementById('background-image'),
+      countdownDisplay: document.getElementById('countdown'),
+      mediaError: document.getElementById('media-error'),
+      mediaFileInput: document.getElementById('media-file'),
+      changeMediaButton: document.getElementById('change-media'),
+      toggleSettingsFormButton: document.getElementById('toggle-settings-form'),
+      settingsButtonContainer: document.getElementById('settings-button-container'),
+      settingsFormContainer: document.getElementById('settings-form-container'),
+      settingsForm: document.getElementById('settings-form'),
+      detailedBackgroundForm: document.getElementById('detailed-background-form'),
+      backgroundFormTitle: document.getElementById('background-form-title'),
+      customVideoFileInput: document.getElementById('custom-video-file'),
+      backgroundOpacityInput: document.getElementById('background-opacity'),
+      predefinedBackgroundSelect: document.getElementById('predefined-background'),
+      videoLoopCheckbox: document.getElementById('video-loop'),
+      videoMutedCheckbox: document.getElementById('video-muted'),
+      resetBackgroundButton: document.getElementById('reset-background'),
+      saveBackgroundSettingsButton: document.getElementById('save-background-settings'),
+      cancelBackgroundSettingsButton: document.getElementById('cancel-background-settings'),
+      questionList: document.getElementById('question-list'),
+      questionNumberSelect: document.getElementById('question-number'),
+      questionTextInput: document.getElementById('question-text'),
+      answer1TextInput: document.getElementById('answer1-text'),
+      answer2TextInput: document.getElementById('answer2-text'),
+      changeQuestionButton: document.getElementById('change-question'),
+      importQuestionsInput: document.getElementById('import-questions'),
+      exportQuestionsButton: document.getElementById('export-questions'),
+      questionDisplay: document.getElementById('question-display'),
+      answer1Button: document.getElementById('answer1-btn'),
+      answer2Button: document.getElementById('answer2-btn'),
+      answerContainer: document.getElementById('answer-container'),
+      answerButtons: document.getElementById('answer-buttons'),
+      gameOverMessage: document.getElementById('game-over'),
+      tryAgainButton: document.getElementById('try-again'),
+      tryAgainCompleteButton: document.getElementById('try-again-complete'),
+      completeMessage: document.getElementById('complete-message'),
+      getReadyMessage: document.getElementById('get-ready-message')
+    };
+
+    // デフォルトの背景設定
+    const defaultBackground = { type: 'video', fileName: 'default.mp4', opacity: 0.3, loop: true, muted: true, isCustom: false, src: 'https://coverr.co/videos/abstract-blue-background-9E8X7Y2K0T' };
+    // クイズ問題の初期データ
+    let questions = [
+      { question: "地球上で最大の大陸は？", answer1: "アフリカ", answer2: "ユーラシア大陸", correctAnswer: 2, background: { ...defaultBackground } },
+      { question: "日本の首都は？", answer1: "東京", answer2: "大阪", correctAnswer: 1, background: { ...defaultBackground } },
+      { question: "1+1は？", answer1: "2", answer2: "11", correctAnswer: 1, background: { ...defaultBackground } },
+      { question: "太陽系の惑星の数は？", answer1: "8", answer2: "9", correctAnswer: 1, background: { ...defaultBackground } },
+      { question: "世界で最も高い山は？", answer1: "エベレスト", answer2: "富士山", correctAnswer: 1, background: { ...defaultBackground } }
+    ];
+    let currentQuestionIndex = 0;
+    let isGameOver = false;
+    let currentBackground = { page: { ...defaultBackground } };
+    let countdownInterval = null;
+    let settingsFormLocation = 'start';
+    let videoRetryCount = 0;
+    const maxVideoRetries = 2;
+    const defaultVideoSrc = 'https://coverr.co/videos/abstract-blue-background-9E8X7Y2K0T';
+    let customVideoURL = null;
+    let currentEditingBackgroundIndex = -1;
+
+    // 動画再生の試行
+    function attemptVideoPlayback(videoElement, src, onSuccess, onFailure) {
+      console.log(`Attempting to play video: ${src}, retry ${videoRetryCount + 1}/${maxVideoRetries}`);
+      videoRetryCount++;
+      videoElement.src = src;
+      videoElement.loop = currentEditingBackgroundIndex === -1 ? currentBackground.page.loop : questions[currentEditingBackgroundIndex].background.loop;
+      videoElement.muted = currentEditingBackgroundIndex === -1 ? currentBackground.page.muted : questions[currentEditingBackgroundIndex].background.muted;
+      videoElement.load();
+      videoElement.play().then(() => {
+        console.log(`Video playback successful: ${src}`);
+        videoRetryCount = 0;
+        if (onSuccess) onSuccess();
+      }).catch((error) => {
+        console.error(`Video playback failed: ${error}`);
+        if (videoRetryCount < maxVideoRetries) {
+          setTimeout(() => attemptVideoPlayback(videoElement, src, onSuccess, onFailure), 1000);
+        } else {
+          elements.mediaError.textContent = '動画の再生に失敗しました。別のMP4ファイルを選択してください。';
+          elements.mediaError.classList.remove('hidden');
+          setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+          if (onFailure) onFailure();
+        }
+      });
+    }
+
+    // 初期化関数
+    function initialize() {
+      console.log('Initializing quiz game');
+      elements.startScreen.classList.remove('hidden');
+      elements.video.classList.add('hidden');
+      elements.image.classList.add('hidden');
+      elements.settingsForm.classList.add('hidden');
+      elements.detailedBackgroundForm.classList.add('hidden');
+      elements.questionDisplay.classList.add('hidden');
+      elements.questionDisplay.style.display = 'none';
+      elements.answerContainer.classList.add('hidden');
+      elements.settingsButtonContainer.classList.add('hidden');
+      elements.completeMessage.classList.add('hidden');
+      elements.gameOverMessage.classList.add('hidden');
+      elements.settingsFormContainer.classList.add('hidden');
+      elements.countdownDisplay.classList.add('hidden');
+      elements.getReadyMessage.classList.add('hidden');
+      elements.startButton.disabled = false;
+      elements.startSettingsButton.disabled = false;
+      elements.detailedBackgroundButton.disabled = false;
+      elements.toggleDetailedBackground.disabled = false;
+      elements.answer1Button.disabled = true;
+      elements.answer2Button.disabled = true;
+      bindEventListeners();
+      updateQuestionList();
+    }
+
+    // イベントリスナーのバインド
+    function bindEventListeners() {
+      console.log('Binding event listeners');
+      elements.startButton.onclick = () => {
+        console.log('Start button clicked');
+        handleStart();
+      };
+      elements.startSettingsButton.onclick = () => {
+        console.log('Start settings button clicked');
+        handleToggleSettingsStart();
+      };
+      elements.detailedBackgroundButton.onclick = () => {
+        console.log('Detailed background button clicked');
+        handleToggleDetailedBackground(-1);
+      };
+      elements.toggleDetailedBackground.onclick = () => {
+        console.log('Toggle detailed background button clicked');
+        handleToggleDetailedBackground(currentQuestionIndex);
+      };
+      elements.answer1Button.onclick = () => {
+        console.log('Answer 1 button clicked');
+        handleAnswer1();
+      };
+      elements.answer2Button.onclick = () => {
+        console.log('Answer 2 button clicked');
+        handleAnswer2();
+      };
+      elements.changeMediaButton.onclick = () => {
+        console.log('Change media button clicked');
+        handleChangePageMedia();
+      };
+      elements.toggleSettingsFormButton.onclick = () => {
+        console.log('Toggle settings form button clicked');
+        handleToggleSettingsQuiz();
+      };
+      elements.changeQuestionButton.onclick = () => {
+        console.log('Change question button clicked');
+        handleChangeQuestion();
+      };
+      elements.exportQuestionsButton.onclick = () => {
+        console.log('Export questions button clicked');
+        handleExportQuestions();
+      };
+      elements.tryAgainButton.onclick = () => {
+        console.log('Try again button clicked');
+        resetGame();
+      };
+      elements.tryAgainCompleteButton.onclick = () => {
+        console.log('Try again complete button clicked');
+        resetGame();
+      };
+      elements.importQuestionsInput.onchange = () => {
+        console.log('Import questions input changed');
+        handleImportQuestions();
+      };
+      elements.saveBackgroundSettingsButton.onclick = () => {
+        console.log('Save background settings button clicked');
+        handleSaveBackgroundSettings();
+      };
+      elements.cancelBackgroundSettingsButton.onclick = () => {
+        console.log('Cancel background settings button clicked');
+        handleCancelBackgroundSettings();
+      };
+      elements.resetBackgroundButton.onclick = () => {
+        console.log('Reset background button clicked');
+        handleResetBackground();
+      };
+      elements.customVideoFileInput.onchange = () => {
+        console.log('Custom video file input changed');
+        handleCustomVideoFile();
+      };
+    }
+
+    // カスタム動画ファイルの処理
+    function handleCustomVideoFile() {
+      const file = elements.customVideoFileInput.files[0];
+      if (file && file.type === 'video/mp4') {
+        console.log(`Selected custom video file: ${file.name}`);
+        customVideoURL = URL.createObjectURL(file);
+      } else if (file) {
+        console.error('Invalid file type for custom video');
+        elements.mediaError.textContent = 'MP4形式の動画を選択してください。';
+        elements.mediaError.classList.remove('hidden');
+        setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+        elements.customVideoFileInput.value = '';
+        customVideoURL = null;
+      } else {
+        console.log('No custom video file selected');
+        customVideoURL = null;
+      }
+    }
+
+    // 背景設定フォームの表示/非表示
+    function handleToggleDetailedBackground(index) {
+      console.log(`Toggling detailed background form for index: ${index}`);
+      elements.detailedBackgroundForm.classList.toggle('hidden');
+      elements.settingsForm.classList.add('hidden');
+      currentEditingBackgroundIndex = index;
+      if (!elements.detailedBackgroundForm.classList.contains('hidden')) {
+        const bg = index === -1 ? currentBackground.page : questions[index].background;
+        elements.backgroundFormTitle.textContent = index === -1 ? 'ページの背景の詳細設定' : `問題 ${index + 1} の背景の詳細設定`;
+        elements.backgroundOpacityInput.value = bg.opacity;
+        elements.videoLoopCheckbox.checked = bg.loop;
+        elements.videoMutedCheckbox.checked = bg.muted;
+        const currentValue = `${bg.type}|${bg.src}|${bg.fileName}`;
+        if (!bg.isCustom && [...elements.predefinedBackgroundSelect.options].some(option => option.value === currentValue)) {
+          elements.predefinedBackgroundSelect.value = currentValue;
+        } else {
+          elements.predefinedBackgroundSelect.value = `video|${defaultVideoSrc}|default.mp4`;
+        }
+        elements.customVideoFileInput.value = '';
+        customVideoURL = null;
+        console.log(`Background form opened for ${index === -1 ? 'page' : `question ${index + 1}`}`);
+      }
+    }
+
+    // 背景設定の保存
+    function handleSaveBackgroundSettings() {
+      console.log('Saving background settings');
+      const opacity = parseFloat(elements.backgroundOpacityInput.value);
+      if (isNaN(opacity) || opacity < 0.1 || opacity > 1.0) {
+        console.error('Invalid opacity value');
+        elements.mediaError.textContent = '透明度は0.1〜1.0の範囲で指定してください。';
+        elements.mediaError.classList.remove('hidden');
+        setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+        return;
+      }
+      const loop = elements.videoLoopCheckbox.checked;
+      const muted = elements.videoMutedCheckbox.checked;
+      let newBackground;
+      if (customVideoURL && elements.customVideoFileInput.files[0] && elements.customVideoFileInput.files[0].type === 'video/mp4') {
+        console.log(`Applying custom video: ${elements.customVideoFileInput.files[0].name}`);
+        elements.video.classList.remove('hidden');
+        elements.image.classList.add('hidden');
+        elements.video.style.opacity = opacity;
+        elements.videoSource.src = customVideoURL;
+        newBackground = {
+          type: 'video',
+          fileName: elements.customVideoFileInput.files[0].name,
+          opacity,
+          loop,
+          muted,
+          isCustom: true,
+          src: customVideoURL
+        };
+        attemptVideoPlayback(elements.video, customVideoURL, () => {
+          URL.revokeObjectURL(customVideoURL);
+          customVideoURL = null;
+          elements.customVideoFileInput.value = '';
+          console.log('Custom video URL revoked');
+        });
+      } else {
+        const [type, src, fileName] = elements.predefinedBackgroundSelect.value.split('|');
+        console.log(`Applying predefined background: ${type}, ${fileName}`);
+        newBackground = { type, fileName, opacity, loop, muted, isCustom: false, src };
+        if (type === 'video') {
+          elements.video.classList.remove('hidden');
+          elements.image.classList.add('hidden');
+          elements.video.style.opacity = opacity;
+          elements.videoSource.src = src;
+          attemptVideoPlayback(elements.video, src);
+        } else {
+          elements.image.src = src;
+          elements.image.classList.remove('hidden');
+          elements.video.classList.add('hidden');
+          elements.image.style.opacity = opacity;
+          console.log(`Image background set: ${src}`);
+        }
+      }
+      if (currentEditingBackgroundIndex === -1) {
+        currentBackground.page = newBackground;
+        console.log('Page background updated');
+      } else {
+        questions[currentEditingBackgroundIndex].background = newBackground;
+        console.log(`Question ${currentEditingBackgroundIndex + 1} background updated`);
+      }
+      if (currentEditingBackgroundIndex === currentQuestionIndex) {
+        updateBackgroundDisplay();
+      }
+      elements.detailedBackgroundForm.classList.add('hidden');
+      elements.mediaError.textContent = '背景設定を保存しました。';
+      elements.mediaError.classList.remove('hidden');
+      setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+      currentEditingBackgroundIndex = -1;
+      updateQuestionList();
+    }
+
+    // 背景設定のキャンセル
+    function handleCancelBackgroundSettings() {
+      console.log('Canceling background settings');
+      elements.detailedBackgroundForm.classList.add('hidden');
+      if (customVideoURL) {
+        URL.revokeObjectURL(customVideoURL);
+        customVideoURL = null;
+        console.log('Custom video URL revoked on cancel');
+      }
+      elements.customVideoFileInput.value = '';
+      currentEditingBackgroundIndex = -1;
+    }
+
+    // 背景のリセット
+    function handleResetBackground() {
+      console.log('Resetting background to default');
+      const newBackground = { ...defaultBackground };
+      elements.video.classList.remove('hidden');
+      elements.image.classList.add('hidden');
+      elements.video.style.opacity = 0.3;
+      elements.video.loop = true;
+      elements.video.muted = true;
+      elements.videoSource.src = defaultVideoSrc;
+      attemptVideoPlayback(elements.video, defaultVideoSrc);
+      elements.backgroundOpacityInput.value = 0.3;
+      elements.videoLoopCheckbox.checked = true;
+      elements.videoMutedCheckbox.checked = true;
+      elements.predefinedBackgroundSelect.value = `video|${defaultVideoSrc}|default.mp4`;
+      elements.customVideoFileInput.value = '';
+      if (customVideoURL) {
+        URL.revokeObjectURL(customVideoURL);
+        customVideoURL = null;
+        console.log('Custom video URL revoked on reset');
+      }
+      if (currentEditingBackgroundIndex === -1) {
+        currentBackground.page = newBackground;
+        console.log('Page background reset');
+      } else {
+        questions[currentEditingBackgroundIndex].background = newBackground;
+        console.log(`Question ${currentEditingBackgroundIndex + 1} background reset`);
+      }
+      if (currentEditingBackgroundIndex === currentQuestionIndex) {
+        updateBackgroundDisplay();
+      }
+      elements.mediaError.textContent = 'デフォルト背景にリセットしました。';
+      elements.mediaError.classList.remove('hidden');
+      setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+      updateQuestionList();
+    }
+
+    // ゲーム開始
+    function handleStart() {
+      console.log('Starting game');
+      elements.startScreen.classList.add('hidden');
+      updateBackgroundDisplay();
+      elements.getReadyMessage.classList.add('hidden');
+      elements.questionDisplay.classList.add('hidden');
+      elements.questionDisplay.style.display = 'none';
+      elements.answerContainer.classList.add('hidden');
+      elements.settingsButtonContainer.classList.add('hidden');
+      elements.settingsForm.classList.add('hidden');
+      elements.detailedBackgroundForm.classList.add('hidden');
+      elements.settingsFormContainer.classList.add('hidden');
+      elements.completeMessage.classList.add('hidden');
+      elements.gameOverMessage.classList.add('hidden');
+      elements.mediaError.classList.add('hidden');
+      elements.countdownDisplay.classList.add('hidden');
+      elements.answer1Button.classList.add('disabled-answer');
+      elements.answer1Button.classList.remove('clicked-answer', 'enabled-answer', 'selected-answer');
+      elements.answer1Button.disabled = true;
+      elements.answer1Button.style.pointerEvents = 'none';
+      elements.answer2Button.classList.add('disabled-answer');
+      elements.answer2Button.classList.remove('clicked-answer', 'enabled-answer', 'selected-answer');
+      elements.answer2Button.disabled = true;
+      elements.answer2Button.style.pointerEvents = 'none';
+      elements.settingsButtonContainer.classList.remove('hidden');
+      updateQuestionDisplay();
+      startCountdown();
+    }
+
+    // スタート画面の設定フォーム表示/非表示
+    function handleToggleSettingsStart() {
+      console.log('Toggling settings form in start screen');
+      if (elements.settingsFormContainer.contains(elements.settingsForm)) {
+        elements.startScreen.appendChild(elements.settingsForm);
+      }
+      elements.settingsForm.classList.toggle('hidden');
+      elements.detailedBackgroundForm.classList.add('hidden');
+      elements.settingsFormContainer.classList.add('hidden');
+      settingsFormLocation = 'start';
+      if (!elements.settingsForm.classList.contains('hidden')) {
+        updateQuestionList();
+        updateQuestionNumberSelect();
+      }
+    }
+
+    // クイズ中の設定フォーム表示/非表示
+    function handleToggleSettingsQuiz() {
+      console.log('Toggling settings form in quiz');
+      if (elements.startScreen.contains(elements.settingsForm)) {
+        elements.settingsFormContainer.appendChild(elements.settingsForm);
+      }
+      elements.settingsFormContainer.classList.toggle('hidden');
+      elements.detailedBackgroundForm.classList.add('hidden');
+      settingsFormLocation = 'quiz';
+      if (!elements.settingsFormContainer.classList.contains('hidden')) {
+        updateQuestionList();
+        updateQuestionNumberSelect();
+      }
+    }
+
+    // 問題リストの更新
+    function updateQuestionList() {
+      console.log('Updating question list');
+      elements.questionList.innerHTML = '';
+      questions.forEach((q, index) => {
+        const div = document.createElement('div');
+        div.className = 'mb-4 p-4 bg-gray-800 rounded-xl';
+        div.innerHTML = `
+          <p class="text-xl">問題 ${index + 1}: ${q.question}</p>
+          <p class="text-lg">選択肢1: ${q.answer1} ${q.correctAnswer === 1 ? '(正解)' : ''}</p>
+          <p class="text-lg">選択肢2: ${q.answer2} ${q.correctAnswer === 2 ? '(正解)' : ''}</p>
+          <p class="text-lg">背景: ${q.background.type === 'video' ? '動画' : '画像'} (${q.background.fileName})</p>
+          <button class="edit-background bg-blue-600 hover:bg-blue-800 text-white font-bold py-2 px-4 rounded-xl mt-2 text-lg" data-index="${index}">背景を編集</button>
+        `;
+        elements.questionList.appendChild(div);
+      });
+      elements.questionList.querySelectorAll('.edit-background').forEach(button => {
+        button.onclick = () => {
+          console.log(`Edit background button clicked for question ${button.dataset.index}`);
+          handleToggleDetailedBackground(parseInt(button.dataset.index));
+        };
+      });
+    }
+
+    // 問題番号選択の更新
+    function updateQuestionNumberSelect() {
+      console.log('Updating question number select');
+      elements.questionNumberSelect.innerHTML = '';
+      questions.forEach((_, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = `問題 ${index + 1}`;
+        elements.questionNumberSelect.appendChild(option);
+      });
+    }
+
+    // 問題の変更
+    function handleChangeQuestion() {
+      console.log('Changing question');
+      const index = parseInt(elements.questionNumberSelect.value);
+      const question = elements.questionTextInput.value.trim();
+      const answer1 = elements.answer1TextInput.value.trim();
+      const answer2 = elements.answer2TextInput.value.trim();
+      const correctAnswer = parseInt(document.querySelector('input[name="correct-answer"]:checked').value);
+      if (!question || !answer1 || !answer2) {
+        console.error('Missing question or answer inputs');
+        elements.mediaError.textContent = '問題と選択肢をすべて入力してください。';
+        elements.mediaError.classList.remove('hidden');
+        setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+        return;
+      }
+      questions[index] = { ...questions[index], question, answer1, answer2, correctAnswer };
+      console.log(`Question ${index + 1} updated`);
+      updateQuestionList();
+      elements.mediaError.textContent = `問題 ${index + 1} を更新しました。`;
+      elements.mediaError.classList.remove('hidden');
+      setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+    }
+
+    // 問題と背景のエクスポート
+    function handleExportQuestions() {
+      console.log('Exporting questions and backgrounds');
+      const data = { questions, pageBackground: currentBackground.page };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'quiz-data.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      console.log('Export completed');
+    }
+
+    // 問題と背景のインポート
+    function handleImportQuestions() {
+      console.log('Importing questions and backgrounds');
+      const file = elements.importQuestionsInput.files[0];
+      if (!file) {
+        console.error('No file selected for import');
+        elements.mediaError.textContent = 'JSONファイルを選択してください。';
+        elements.mediaError.classList.remove('hidden');
+        setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const importedData = JSON.parse(e.target.result);
+          if (!Array.isArray(importedData.questions) || importedData.questions.length === 0) {
+            console.error('Invalid JSON format: questions array missing or empty');
+            elements.mediaError.textContent = '無効なJSON形式です。questions配列を指定してください。';
+            elements.mediaError.classList.remove('hidden');
+            setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+            return;
+          }
+          const isValid = importedData.questions.every(q =>
+            typeof q.question === 'string' && q.question.trim() &&
+            typeof q.answer1 === 'string' && q.answer1.trim() &&
+            typeof q.answer2 === 'string' && q.answer2.trim() &&
+            (q.correctAnswer === 1 || q.correctAnswer === 2) &&
+            q.background && ['video', 'image'].includes(q.background.type)
+          );
+          if (!isValid) {
+            console.error('Invalid question format');
+            elements.mediaError.textContent = '無効な問題形式です。各問題にはquestion, answer1, answer2（文字列）、correctAnswer（1または2）、backgroundが必要です。';
+            elements.mediaError.classList.remove('hidden');
+            setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+            return;
+          }
+          questions = importedData.questions;
+          if (importedData.pageBackground) {
+            currentBackground.page = importedData.pageBackground;
+            updateBackgroundDisplay();
+          }
+          updateQuestionList();
+          updateQuestionNumberSelect();
+          elements.mediaError.textContent = '問題と背景をインポートしました。';
+          elements.mediaError.classList.remove('hidden');
+          setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+          console.log('Import successful');
+        } catch (error) {
+          console.error(`Import failed: ${error}`);
+          elements.mediaError.textContent = 'JSONファイルの読み込みに失敗しました。';
+          elements.mediaError.classList.remove('hidden');
+          setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // ページ背景の変更
+    function handleChangePageMedia() {
+      console.log('Changing page media');
+      const file = elements.mediaFileInput.files[0];
+      if (!file) {
+        console.error('No file selected for page media');
+        elements.mediaError.textContent = 'ファイルを選択してください。';
+        elements.mediaError.classList.remove('hidden');
+        setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+        return;
+      }
+      const fileType = file.type;
+      const fileURL = URL.createObjectURL(file);
+      if (fileType === 'video/mp4') {
+        console.log(`Applying video: ${file.name}`);
+        elements.videoSource.src = fileURL;
+        elements.video.classList.remove('hidden');
+        elements.image.classList.add('hidden');
+        currentBackground.page = { type: 'video', fileName: file.name, opacity: currentBackground.page.opacity, loop: currentBackground.page.loop, muted: currentBackground.page.muted, isCustom: true, src: fileURL };
+        attemptVideoPlayback(elements.video, fileURL, () => URL.revokeObjectURL(fileURL));
+      } else if (['image/jpeg', 'image/png', 'image/gif'].includes(fileType)) {
+        console.log(`Applying image: ${file.name}`);
+        elements.image.src = fileURL;
+        elements.image.classList.remove('hidden');
+        elements.video.classList.add('hidden');
+        elements.image.style.opacity = currentBackground.page.opacity;
+        currentBackground.page = { type: 'image', fileName: file.name, opacity: currentBackground.page.opacity, loop: false, muted: false, isCustom: true, src: fileURL };
+        URL.revokeObjectURL(fileURL);
+      } else {
+        console.error('Invalid file type for page media');
+        elements.mediaError.textContent = 'MP4動画またはJPG/PNG/GIF画像を選択してください。';
+        elements.mediaError.classList.remove('hidden');
+        setTimeout(() => elements.mediaError.classList.add('hidden'), 3000);
+      }
+    }
+
+    // 背景表示の更新
+    function updateBackgroundDisplay() {
+      console.log('Updating background display');
+      const bg = isGameOver || currentQuestionIndex >= questions.length ? currentBackground.page : questions[currentQuestionIndex].background;
+      if (bg.type === 'video') {
+        elements.videoSource.src = bg.src;
+        elements.video.classList.remove('hidden');
+        elements.image.classList.add('hidden');
+        elements.video.style.opacity = bg.opacity;
+        elements.video.loop = bg.loop;
+        elements.video.muted = bg.muted;
+        console.log(`Setting video background: ${bg.src}`);
+        attemptVideoPlayback(elements.video, bg.src);
+      } else {
+        elements.image.src = bg.src;
+        elements.image.classList.remove('hidden');
+        elements.video.classList.add('hidden');
+        elements.image.style.opacity = bg.opacity;
+        console.log(`Setting image background: ${bg.src}`);
+      }
+    }
+
+    // 問題表示の更新
+    function updateQuestionDisplay() {
+      if (currentQuestionIndex >= questions.length) {
+        console.log('No more questions to display');
+        return;
+      }
+      const q = questions[currentQuestionIndex];
+      elements.questionDisplay.textContent = `問題 ${currentQuestionIndex + 1}: ${q.question}`;
+      elements.answer1Button.textContent = q.answer1;
+      elements.answer2Button.textContent = q.answer2;
+      console.log(`Displaying question ${currentQuestionIndex + 1}: ${q.question}`);
+      updateBackgroundDisplay();
+    }
+
+    // カウントダウンの開始
+    function startCountdown() {
+      if (countdownInterval) clearInterval(countdownInterval);
+      let timeLeft = 5;
+      console.log('Starting countdown');
+      elements.countdownDisplay.textContent = timeLeft;
+      elements.countdownDisplay.classList.remove('hidden');
+      elements.answer1Button.disabled = false;
+      elements.answer1Button.classList.remove('disabled-answer');
+      elements.answer1Button.classList.add('enabled-answer');
+      elements.answer1Button.style.pointerEvents = 'auto';
+      elements.answer2Button.disabled = false;
+      elements.answer2Button.classList.remove('disabled-answer');
+      elements.answer2Button.classList.add('enabled-answer');
+      elements.answer2Button.style.pointerEvents = 'auto';
+      console.log('Answer buttons enabled');
+      elements.questionDisplay.classList.remove('hidden');
+      elements.questionDisplay.style.display = 'block';
+      elements.questionDisplay.classList.add('fly-in');
+      elements.questionDisplay.addEventListener('animationend', () => {
+        elements.questionDisplay.classList.remove('fly-in');
+        elements.questionDisplay.style.transform = 'scale(1)';
+        console.log('Question display animation ended');
+      }, { once: true });
+      elements.answerContainer.classList.remove('hidden');
+      elements.answerContainer.style.display = 'flex';
+      elements.answerContainer.classList.add('fly-in');
+      elements.answerContainer.addEventListener('animationend', () => {
+        elements.answerContainer.classList.remove('fly-in');
+        elements.answerContainer.style.transform = 'scale(1)';
+        console.log('Answer container animation ended');
+      }, { once: true });
+      countdownInterval = setInterval(() => {
+        timeLeft--;
+        elements.countdownDisplay.textContent = timeLeft;
+        console.log(`Countdown: ${timeLeft}`);
+        if (timeLeft <= 0) {
+          clearInterval(countdownInterval);
+          elements.countdownDisplay.classList.add('hidden');
+          console.log('Countdown finished');
+        }
+      }, 1000);
+    }
+
+    // 結果オーバーレイの表示
+    function showResultOverlay(message, isCorrect) {
+      console.log(`Showing result overlay: ${message}, isCorrect: ${isCorrect}`);
+      const overlay = document.createElement('div');
+      overlay.className = `result-overlay ${isCorrect ? 'text-green-500' : 'text-red-500'}`;
+      overlay.textContent = message;
+      document.body.appendChild(overlay);
+      setTimeout(() => overlay.classList.add('animate-pulse'), 100);
+      setTimeout(() => overlay.remove(), 2000);
+    }
+
+    // 選択肢1の処理
+    function handleAnswer1() {
+      if (elements.answer1Button.disabled) {
+        console.log('Answer 1 button is disabled, ignoring click');
+        return;
+      }
+      console.log('Processing answer 1');
+      elements.answer1Button.classList.add('clicked-answer');
+      handleAnswer(elements.answer1Button, elements.answer2Button, questions[currentQuestionIndex].correctAnswer === 1);
+    }
+
+    // 選択肢2の処理
+    function handleAnswer2() {
+      if (elements.answer2Button.disabled) {
+        console.log('Answer 2 button is disabled, ignoring click');
+        return;
+      }
+      console.log('Processing answer 2');
+      elements.answer2Button.classList.add('clicked-answer');
+      handleAnswer(elements.answer2Button, elements.answer1Button, questions[currentQuestionIndex].correctAnswer === 2);
+    }
+
+    // 回答の処理
+    function handleAnswer(selectedButton, otherButton, isCorrect) {
+      console.log(`Handling answer, isCorrect: ${isCorrect}`);
+      if (countdownInterval) clearInterval(countdownInterval);
+      selectedButton.classList.add('selected-answer');
+      selectedButton.classList.remove('enabled-answer');
+      otherButton.classList.add('hidden');
+      elements.countdownDisplay.classList.add('hidden');
+      if (isCorrect) {
+        selectedButton.classList.remove('bg-blue-600', 'hover:bg-blue-800');
+        selectedButton.classList.add('bg-green-600');
+        setTimeout(() => {
+          showResultOverlay('正解！', true);
+          setTimeout(() => {
+            selectedButton.classList.remove('selected-answer', 'clicked-answer');
+            selectedButton.classList.add('bg-blue-600', 'hover:bg-blue-800', 'disabled-answer');
+            selectedButton.disabled = true;
+            selectedButton.style.pointerEvents = 'none';
+            otherButton.classList.remove('hidden');
+            otherButton.classList.add('disabled-answer');
+            otherButton.disabled = true;
+            otherButton.style.pointerEvents = 'none';
+            currentQuestionIndex++;
+            console.log(`Moving to next question: ${currentQuestionIndex + 1}`);
+            if (currentQuestionIndex < questions.length) {
+              updateQuestionDisplay();
+              startCountdown();
+            } else {
+              showCompleteMessage();
+            }
+          }, 2000);
+        }, 3000);
+      } else {
+        selectedButton.classList.remove('bg-blue-600', 'hover:bg-blue-800');
+        selectedButton.classList.add('bg-red-600');
+        showResultOverlay('不正解！', false);
+        setTimeout(showGameOver, 2000);
+      }
+    }
+
+    // 全問正解メッセージの表示
+    function showCompleteMessage() {
+      console.log('Showing complete message');
+      elements.questionDisplay.classList.add('hidden');
+      elements.answerContainer.classList.add('hidden');
+      elements.completeMessage.classList.remove('hidden');
+      isGameOver = true;
+      updateBackgroundDisplay();
+    }
+
+    // ゲームオーバーの表示
+    function showGameOver() {
+      console.log('Showing game over');
+      elements.questionDisplay.classList.add('hidden');
+      elements.answerContainer.classList.add('hidden');
+      elements.gameOverMessage.classList.remove('hidden');
+      isGameOver = true;
+      updateBackgroundDisplay();
+    }
+
+    // ゲームのリセット
+    function resetGame() {
+      console.log('Resetting game');
+      currentQuestionIndex = 0;
+      isGameOver = false;
+      elements.gameOverMessage.classList.add('hidden');
+      elements.completeMessage.classList.add('hidden');
+      elements.questionDisplay.classList.add('hidden');
+      elements.questionDisplay.style.display = 'none';
+      elements.answerContainer.classList.add('hidden');
+      elements.settingsButtonContainer.classList.remove('hidden');
+      updateQuestionDisplay();
+      startCountdown();
+    }
+
+    // 初期化実行
+    initialize();
+  });
+</script>
+</body>
+</html>
